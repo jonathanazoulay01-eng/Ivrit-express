@@ -141,3 +141,14 @@ main .icon-btn { background: var(--card); border: 1px solid var(--line); box-sha
 .restore-box { margin-top: 18px; text-align: left; }
 .restore-box summary { cursor: pointer; color: var(--brand); font-weight: 600; }
 .restore-box textarea { display: block; width: 100%; margin: 10px 0; padding: 12px 14px; font: inherit; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+
+.stats-pill { font-weight: 700; font-size: .95rem; padding: 4px 10px; border-radius: 999px; background: var(--bg); }
+.kid h3 { margin: 0; }
+.code { font-family: ui-monospace, Menlo, monospace; letter-spacing: 1px; font-size: 1.05rem; }
+
+.gender { border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; margin: 0 0 8px; text-align: left; display: flex; gap: 18px; flex-wrap: wrap; }
+.gender legend { font-weight: 600; padding: 0 6px; }
+.gender label { display: flex; gap: 8px; align-items: center; font-weight: 600; min-height: 44px; }
+.gender.need { border-color: var(--ko); }
+.face .other { font-size: .95rem; opacity: .9; }
+.face .other .he { font-size: 1.2rem; }

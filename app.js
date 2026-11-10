@@ -22,6 +22,7 @@
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
     shareStateWithWorker();
+    cloudPush();
   }
   // Le service worker ne lit pas localStorage : on lui laisse un petit état dans le cache.
   function shareStateWithWorker() {
@@ -123,17 +124,34 @@
       <h2>Bienvenue dans Ivrit Express</h2>
       <p>Apprends l'hébreu moderne un peu chaque jour : des mots, puis des phrases, et un petit contrôle pour passer à l'étape suivante.</p>
       <label class="field">Ton prénom<input id="name" autocomplete="given-name" maxlength="20" placeholder="Ex : Noa"></label>
+      <fieldset class="gender"><legend>Tu es…</legend>
+        <label><input type="radio" name="g" value="m"> 👦 un garçon</label>
+        <label><input type="radio" name="g" value="f"> 👧 une fille</label>
+      </fieldset>
+      <p class="small muted">En hébreu, on ne dit pas pareil « je mange » pour un garçon (אוֹכֵל) et pour une fille (אוֹכֶלֶת). L'appli s'adapte à toi.</p>
       <button class="btn primary" id="go">C'est parti !</button>
       <details class="restore-box"><summary>J'ai déjà un code de sauvegarde</summary>
         <textarea id="wcode" rows="3" placeholder="Colle ton code ici"></textarea>
         <button class="btn" id="wrestore">Retrouver ma progression</button><p class="small" id="winfo"></p></details>
     </div>`);
-    $("#wrestore").onclick = () => { const r = readBackup($("#wcode").value); if (!r) { $("#winfo").textContent = "Ce code ne marche pas. Vérifie qu'il est complet."; return; } S = r; save(); home(); };
-    $("#go").onclick = () => { const n = $("#name").value.trim(); if (!n) { $("#name").focus(); return; } S.name = n; save(); home(); };
+    $("#wrestore").onclick = () => { const r = readBackup($("#wcode").value); if (!r) { $("#winfo").textContent = "Ce code ne marche pas. Vérifie qu'il est complet."; return; } S = r; if (S.gender) applyGender(S.gender); save(); home(); };
+    $("#go").onclick = () => {
+      const n = $("#name").value.trim(), g = app().querySelector('input[name="g"]:checked');
+      if (!n) { $("#name").focus(); return; }
+      if (!g) { $(".gender").classList.add("need"); return; }
+      S.name = n; S.gender = g.value; applyGender(S.gender); save(); home();
+    };
   }
 
+  function askGender() {
+    render(`<div class="welcome"><h2>${esc(S.name)}, tu es…</h2>
+      <p>En hébreu, les verbes et les adjectifs changent pour un garçon ou une fille.</p>
+      <div class="col"><button class="btn primary" data-g="m">👦 un garçon</button><button class="btn primary" data-g="f">👧 une fille</button></div></div>`);
+    app().querySelectorAll("[data-g]").forEach((b) => (b.onclick = () => { S.gender = b.dataset.g; applyGender(S.gender); save(); home(); }));
+  }
   function home() {
     if (!S.name) return welcome();
+    if (!S.gender) return askGender();
     const doneToday = S.dailyDay === todayStr();
     const learned = UNITS.filter((u) => U(u.id).step >= 1);
     const current = UNITS.find((u) => isUnlocked(u.id) && U(u.id).step < 4);
@@ -164,6 +182,7 @@
     });
     html += `</ol>
       <button class="btn ghost wide" data-go="settings">⚙️ Réglages et rappels</button>
+      <button class="btn ghost wide" data-go="parents">👨‍👩‍👧 Espace parents</button>
     </main>`;
     render(html);
   }
@@ -193,11 +212,11 @@
   function learnCards(id) {
     const u = unitById(id); let i = 0;
     const draw = () => {
-      const [w, tr, fr] = u.words[i];
+      const [w, tr, fr, other, otherLabel] = u.words[i];
       render(topbar(`${u.emoji} Découvrir`, `unit:${id}`) + `<main>
         <p class="muted center">Carte ${i + 1} / ${u.words.length} — touche la carte pour la retourner</p>
         <div class="flip" id="card"><div class="face front">${he(w, u, "learn", "huge")}<small class="tr">${esc(tr)}</small></div>
-        <div class="face back"><span class="fr">${esc(fr)}</span>${he(w, u, "learn", "mid")}</div></div>
+        <div class="face back"><span class="fr">${esc(fr)}</span>${he(w, u, "learn", "mid")}${other ? `<small class="other">Pour un${otherLabel === "fille" ? "e" : ""} ${otherLabel} : <span class="he" dir="rtl">${esc(other)}</span></small>` : ""}</div></div>
         <div class="row center">${speakBtn(w)}</div>
         <div class="row"><button class="btn" id="prev" ${i === 0 ? "disabled" : ""}>←</button>
         <button class="btn primary grow" id="next">${i === u.words.length - 1 ? "J'ai tout vu !" : "Suivant →"}</button></div></main>`);
@@ -414,7 +433,17 @@
         <p class="muted small">Par défaut, les voyelles sont partout dans les étapes 1 à 6, seulement pendant l'apprentissage des étapes 7 à 36, puis disparaissent. On peut toujours toucher un mot pour les voir.</p>
       </section>
       <section class="card">
-        <h3>💾 Sauvegarde</h3>
+        <h3>☁️ Sauvegarde en ligne</h3>
+        <p class="small">Entre le code famille donné par tes parents. Ta progression sera sauvegardée et ils pourront la suivre.</p>
+        <label class="field">Code famille<input id="family" value="${esc(S.family || "")}" autocapitalize="characters" placeholder="Ex : K7PQ2MZA"></label>
+        <button class="btn primary" id="save-family">Enregistrer</button>
+        ${S.cloudId ? `<p class="small">Ton code perso : <b class="code">${S.cloudId.replace(/(.{4})(?=.)/g, "$1-")}</b><br>Note-le : il te permet de retrouver ta progression sur un autre téléphone.</p>` : ""}
+        <label class="field">Retrouver ma progression avec mon code perso<input id="perso" autocapitalize="characters" placeholder="XXXX-XXXX-XXXX"></label>
+        <button class="btn" id="load-perso">Retrouver</button>
+        <p class="small" id="cloud-info" aria-live="polite">${S.lastSync ? "Dernière sauvegarde : " + new Date(S.lastSync).toLocaleString("fr-FR") : ""}</p>
+      </section>
+      <section class="card">
+        <h3>💾 Sauvegarde sans internet</h3>
         <p class="small">Garde ce code (par exemple en te l'envoyant sur WhatsApp). Sur un nouveau téléphone, colle-le ici pour retrouver toute ta progression.</p>
         <button class="btn primary" id="copy-code">Copier mon code de sauvegarde</button>
         <label class="field">Retrouver ma progression<textarea id="restore-code" rows="3" placeholder="Colle ton code ici"></textarea></label>
@@ -424,13 +453,26 @@
       <section class="card">
         <h3>👤 Profil</h3>
         <label class="field">Prénom<input id="pname" value="${esc(S.name)}" maxlength="20"></label>
+        <label class="field">Je suis<select id="pgender"><option value="m" ${S.gender !== "f" ? "selected" : ""}>👦 un garçon</option><option value="f" ${S.gender === "f" ? "selected" : ""}>👧 une fille</option></select></label>
         <button class="btn danger" id="reset">Tout recommencer à zéro</button>
       </section>
       <p class="muted small center">Ivrit Express · ${UNITS.length} étapes · ${UNITS.reduce((a, u) => a + u.words.length, 0)} mots · ${UNITS.reduce((a, u) => a + u.sentences.length, 0)} phrases</p>
     </main>`);
     $("#nik").onchange = (e) => { S.alwaysNikud = e.target.checked; save(); };
+    $("#pgender").onchange = (e) => { S.gender = e.target.value; applyGender(S.gender); save(); };
     $("#pname").onchange = (e) => { if (e.target.value.trim()) { S.name = e.target.value.trim(); save(); } };
     $("#hour").onchange = (e) => { S.remindHour = Number(e.target.value); save(); };
+    $("#save-family").onclick = () => {
+      const f = cleanCode($("#family").value), info = $("#cloud-info");
+      if (f && f.length < 6) { info.textContent = "Le code famille doit faire au moins 6 caractères."; return; }
+      S.family = f; save(); info.textContent = f ? "✅ Code enregistré. Ta progression est sauvegardée en ligne." : "Sauvegarde en ligne désactivée.";
+      setTimeout(settings, 1800);
+    };
+    $("#load-perso").onclick = async () => {
+      const info = $("#cloud-info"); info.textContent = "Recherche…";
+      try { const r = await cloudRestore($("#perso").value); if (!r) { info.textContent = "Code introuvable. Vérifie-le."; return; } S = r; if (S.gender) applyGender(S.gender); save(); info.textContent = `✅ Progression de ${S.name} retrouvée !`; setTimeout(home, 900); }
+      catch (e) { info.textContent = "Pas de connexion internet pour l'instant."; }
+    };
     $("#copy-code").onclick = async () => {
       const code = makeBackup(), info = $("#backup-info");
       try {
@@ -445,7 +487,7 @@
       const info = $("#backup-info");
       const r = readBackup($("#restore-code").value);
       if (!r) { info.textContent = "Ce code ne marche pas. Vérifie qu'il est complet (il commence par IVRIT1)."; return; }
-      S = r; save(); info.textContent = `✅ Progression de ${S.name} retrouvée !`;
+      S = r; if (S.gender) applyGender(S.gender); save(); info.textContent = `✅ Progression de ${S.name} retrouvée !`;
       setTimeout(home, 900);
     };
     $("#reset").onclick = () => { if (confirm("Effacer toute la progression ?")) { S = Object.assign({}, defaults); save(); welcome(); } };
@@ -470,7 +512,7 @@
     let last = 0; UNITS.forEach((u) => { if (S.units[u.id] && S.units[u.id].step > 0) last = u.id; });
     let u = "";
     for (let id = 1; id <= last; id++) { const x = S.units[id] || {}; u += B36[(x.step || 0) * 4 + (x.stars || 0)] + B36[x.best || 0]; }
-    const o = { n: S.name, x: S.xp, s: S.streak, l: S.lastDay, d: S.dailyDay, h: S.remindHour, v: S.alwaysNikud ? 1 : 0, u };
+    const o = { n: S.name, x: S.xp, s: S.streak, l: S.lastDay, d: S.dailyDay, h: S.remindHour, v: S.alwaysNikud ? 1 : 0, g: S.gender || "", u };
     return "IVRIT1-" + btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/=+$/, "");
   }
   function readBackup(code) {
@@ -479,7 +521,7 @@
       if (!m) return null;
       const o = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
       if (typeof o.n !== "string" || typeof o.u !== "string") return null;
-      const st = Object.assign({}, defaults, { name: o.n, xp: o.x | 0, streak: o.s | 0, lastDay: o.l || "", dailyDay: o.d || "", remindHour: o.h || 18, alwaysNikud: !!o.v, units: {}, mistakes: {} });
+      const st = Object.assign({}, defaults, { name: o.n, xp: o.x | 0, streak: o.s | 0, lastDay: o.l || "", dailyDay: o.d || "", remindHour: o.h || 18, alwaysNikud: !!o.v, gender: o.g || "", units: {}, mistakes: {} });
       for (let i = 0; i * 2 + 1 < o.u.length; i++) {
         const a = B36.indexOf(o.u[i * 2]), b = B36.indexOf(o.u[i * 2 + 1]);
         st.units[i + 1] = { step: Math.floor(a / 4), stars: a % 4, best: b };
@@ -505,6 +547,80 @@
     navigator.serviceWorker.register("sw.js").then(() => { shareStateWithWorker(); if (S.remindOn) registerDailySync(); }).catch(() => {});
   }
 
-  const ROUTES = { home, unit: unitScreen, daily, settings, welcome };
+  // ---------- Sauvegarde en ligne + espace parents ----------
+  const CLOUD = { url: "https://qddkzkqhzbbwrfledovv.supabase.co/rest/v1/rpc/", key: "sb_publishable_nPMIwWtnns93yIvKOQpkUg_6NZsyNCJ" };
+  const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const randCode = (n) => { const a = new Uint32Array(n); crypto.getRandomValues(a); return Array.from(a, (x) => CODE_CHARS[x % CODE_CHARS.length]).join(""); };
+  const cleanCode = (c) => String(c || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  async function rpc(fn, args) {
+    const r = await fetch(CLOUD.url + fn, { method: "POST", headers: { apikey: CLOUD.key, "Content-Type": "application/json" }, body: JSON.stringify(args) });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const t = await r.text(); return t ? JSON.parse(t) : null;
+  }
+  let pushTimer = null;
+  function cloudPush() {
+    if (!S.family || !S.name) return;
+    if (!S.cloudId) { S.cloudId = randCode(12); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => {
+      const data = Object.assign({}, S); delete data.cloudId; delete data.parentFamily;
+      rpc("ivrit_save", { p_id: S.cloudId, p_family: S.family, p_name: S.name, p_data: data })
+        .then(() => { S.lastSync = new Date().toISOString(); try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} })
+        .catch(() => {});
+    }, 1500);
+  }
+  window.addEventListener("online", cloudPush);
+  async function cloudRestore(code) {
+    const id = cleanCode(code);
+    if (id.length < 12) return null;
+    const r = await rpc("ivrit_load", { p_id: id });
+    if (!r || !r.data) return null;
+    return Object.assign({}, defaults, r.data, { cloudId: id, family: r.family });
+  }
+
+  function parents() {
+    render(topbar("Espace parents", "home") + `<main>
+      <section class="card">
+        <h3>👨‍👩‍👧 Suivre mes enfants</h3>
+        <p class="small">Chaque enfant entre le même <b>code famille</b> dans ses Réglages. Sa progression apparaît ici automatiquement.</p>
+        <label class="field">Code famille<input id="fam" value="${esc(S.parentFamily || S.family || "")}" autocapitalize="characters" placeholder="Ex : K7PQ2MZA"></label>
+        <div class="row"><button class="btn primary grow" id="see">Voir la progression</button><button class="btn" id="newfam">Créer un code</button></div>
+        <p class="small" id="pinfo" aria-live="polite"></p>
+      </section>
+      <div id="kids"></div></main>`);
+    const show = async () => {
+      const fam = cleanCode($("#fam").value);
+      if (fam.length < 6) { $("#pinfo").textContent = "Le code famille doit faire au moins 6 caractères."; return; }
+      S.parentFamily = fam; save();
+      $("#pinfo").textContent = "Chargement…";
+      try {
+        const rows = await rpc("ivrit_family", { p_family: fam });
+        $("#pinfo").textContent = rows.length ? "" : "Aucun enfant n'utilise encore ce code. Entrez-le dans les Réglages de leur appli.";
+        $("#kids").innerHTML = rows.map(kidCard).join("");
+      } catch (e) { $("#pinfo").textContent = "Pas de connexion internet pour l'instant. Réessayez plus tard."; }
+    };
+    $("#see").onclick = show;
+    $("#newfam").onclick = () => { $("#fam").value = randCode(8); $("#pinfo").innerHTML = "Nouveau code créé. Notez-le et entrez-le sur le téléphone de chaque enfant (Réglages → Sauvegarde en ligne)."; };
+    if (S.parentFamily) show();
+  }
+  function kidCard(k) {
+    const units = k.units || {};
+    const passed = UNITS.filter((u) => units[u.id] && units[u.id].step >= 4);
+    const stars = passed.reduce((a, u) => a + (units[u.id].stars || 0), 0);
+    const cur = UNITS.find((u) => !(units[u.id] && units[u.id].step >= 4));
+    const alive = k.last_day === todayStr() || k.last_day === yesterdayStr();
+    const last = k.updated_at ? new Date(k.updated_at).toLocaleString("fr-FR", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "jamais";
+    const pct = Math.round((passed.length / UNITS.length) * 100);
+    return `<section class="card kid">
+      <div class="row" style="margin:0"><h3 class="grow">${esc(k.name)}</h3><span class="stats-pill">🔥 ${alive ? k.streak : 0}</span><span class="stats-pill">⭐ ${k.xp}</span></div>
+      <p>${passed.length} étape${passed.length > 1 ? "s" : ""} validée${passed.length > 1 ? "s" : ""} sur ${UNITS.length} · ${stars} ★</p>
+      <span class="bar"><i style="width:${pct}%"></i></span>
+      <p class="small">${cur ? `En cours : étape ${cur.id}, ${cur.emoji} ${esc(cur.title)} (${WORLDS[cur.world].title})` : "Parcours terminé ! 🎉"}</p>
+      <p class="small muted">Dernière activité : ${esc(last)}${k.last_day === todayStr() ? " · ✅ a travaillé aujourd'hui" : ""}</p>
+    </section>`;
+  }
+
+  const ROUTES = { home, unit: unitScreen, daily, settings, welcome, parents };
+  applyGender(S.gender || "m");
   home();
 })();

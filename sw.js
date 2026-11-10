@@ -1,6 +1,6 @@
 // Service worker : fonctionne hors connexion + rappel quotidien
-const VERSION = "ivrit-v3";
-const FILES = ["./", "index.html", "style.css", "data.js", "data2.js", "app.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
+const VERSION = "ivrit-v4";
+const FILES = ["./", "index.html", "style.css", "data.js", "data2.js", "data3.js", "app.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));
