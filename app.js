@@ -124,7 +124,11 @@
       <p>Apprends l'hébreu moderne un peu chaque jour : des mots, puis des phrases, et un petit contrôle pour passer à l'étape suivante.</p>
       <label class="field">Ton prénom<input id="name" autocomplete="given-name" maxlength="20" placeholder="Ex : Noa"></label>
       <button class="btn primary" id="go">C'est parti !</button>
+      <details class="restore-box"><summary>J'ai déjà un code de sauvegarde</summary>
+        <textarea id="wcode" rows="3" placeholder="Colle ton code ici"></textarea>
+        <button class="btn" id="wrestore">Retrouver ma progression</button><p class="small" id="winfo"></p></details>
     </div>`);
+    $("#wrestore").onclick = () => { const r = readBackup($("#wcode").value); if (!r) { $("#winfo").textContent = "Ce code ne marche pas. Vérifie qu'il est complet."; return; } S = r; save(); home(); };
     $("#go").onclick = () => { const n = $("#name").value.trim(); if (!n) { $("#name").focus(); return; } S.name = n; save(); home(); };
   }
 
@@ -410,6 +414,14 @@
         <p class="muted small">Par défaut, les voyelles sont partout dans les étapes 1 à 6, seulement pendant l'apprentissage des étapes 7 à 36, puis disparaissent. On peut toujours toucher un mot pour les voir.</p>
       </section>
       <section class="card">
+        <h3>💾 Sauvegarde</h3>
+        <p class="small">Garde ce code (par exemple en te l'envoyant sur WhatsApp). Sur un nouveau téléphone, colle-le ici pour retrouver toute ta progression.</p>
+        <button class="btn primary" id="copy-code">Copier mon code de sauvegarde</button>
+        <label class="field">Retrouver ma progression<textarea id="restore-code" rows="3" placeholder="Colle ton code ici"></textarea></label>
+        <button class="btn" id="restore">Restaurer</button>
+        <p class="small" id="backup-info" aria-live="polite"></p>
+      </section>
+      <section class="card">
         <h3>👤 Profil</h3>
         <label class="field">Prénom<input id="pname" value="${esc(S.name)}" maxlength="20"></label>
         <button class="btn danger" id="reset">Tout recommencer à zéro</button>
@@ -419,6 +431,23 @@
     $("#nik").onchange = (e) => { S.alwaysNikud = e.target.checked; save(); };
     $("#pname").onchange = (e) => { if (e.target.value.trim()) { S.name = e.target.value.trim(); save(); } };
     $("#hour").onchange = (e) => { S.remindHour = Number(e.target.value); save(); };
+    $("#copy-code").onclick = async () => {
+      const code = makeBackup(), info = $("#backup-info");
+      try {
+        if (navigator.share) await navigator.share({ title: "Ivrit Express", text: code });
+        else { await navigator.clipboard.writeText(code); info.textContent = "✅ Code copié. Colle-le dans un message pour le garder."; }
+      } catch (e) {
+        const t = $("#restore-code"); t.value = code; t.select();
+        info.textContent = "Ton code est dans la case ci-dessus : copie-le.";
+      }
+    };
+    $("#restore").onclick = () => {
+      const info = $("#backup-info");
+      const r = readBackup($("#restore-code").value);
+      if (!r) { info.textContent = "Ce code ne marche pas. Vérifie qu'il est complet (il commence par IVRIT1)."; return; }
+      S = r; save(); info.textContent = `✅ Progression de ${S.name} retrouvée !`;
+      setTimeout(home, 900);
+    };
     $("#reset").onclick = () => { if (confirm("Effacer toute la progression ?")) { S = Object.assign({}, defaults); save(); welcome(); } };
     const inst = $("#install");
     if (inst && deferredInstall) { inst.hidden = false; inst.onclick = () => { deferredInstall.prompt(); deferredInstall = null; inst.hidden = true; }; }
@@ -435,6 +464,30 @@
       reg.showNotification("Ivrit Express", { body: `${S.name}, ton défi d'hébreu t'attend ! 🔥 ${S.streak}`, icon: "icon-192.png", badge: "icon-192.png", tag: "daily" });
     };
   }
+  // ---------- Code de sauvegarde ----------
+  const B36 = "0123456789abcdefghijklmnopqrstuvwxyz";
+  function makeBackup() {
+    let last = 0; UNITS.forEach((u) => { if (S.units[u.id] && S.units[u.id].step > 0) last = u.id; });
+    let u = "";
+    for (let id = 1; id <= last; id++) { const x = S.units[id] || {}; u += B36[(x.step || 0) * 4 + (x.stars || 0)] + B36[x.best || 0]; }
+    const o = { n: S.name, x: S.xp, s: S.streak, l: S.lastDay, d: S.dailyDay, h: S.remindHour, v: S.alwaysNikud ? 1 : 0, u };
+    return "IVRIT1-" + btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/=+$/, "");
+  }
+  function readBackup(code) {
+    try {
+      const m = String(code).replace(/\s+/g, "").match(/IVRIT1-([A-Za-z0-9+/]+)/);
+      if (!m) return null;
+      const o = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+      if (typeof o.n !== "string" || typeof o.u !== "string") return null;
+      const st = Object.assign({}, defaults, { name: o.n, xp: o.x | 0, streak: o.s | 0, lastDay: o.l || "", dailyDay: o.d || "", remindHour: o.h || 18, alwaysNikud: !!o.v, units: {}, mistakes: {} });
+      for (let i = 0; i * 2 + 1 < o.u.length; i++) {
+        const a = B36.indexOf(o.u[i * 2]), b = B36.indexOf(o.u[i * 2 + 1]);
+        st.units[i + 1] = { step: Math.floor(a / 4), stars: a % 4, best: b };
+      }
+      return st;
+    } catch (e) { return null; }
+  }
+
   async function registerDailySync() {
     try {
       const reg = await navigator.serviceWorker.ready;

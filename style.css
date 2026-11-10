@@ -55,7 +55,7 @@ main .icon-btn { background: var(--card); border: 1px solid var(--line); box-sha
 .welcome { padding: 48px 20px; text-align: center; }
 .big-logo { font-family: var(--he-font); font-size: 3.6rem; font-weight: 800; color: var(--brand); }
 .field { display: block; text-align: left; font-weight: 600; margin: 18px 0; }
-.field input, .field select { display: block; width: 100%; margin-top: 6px; padding: 12px 14px; font: inherit; border-radius: 12px;
+.field input, .field select, .field textarea, .restore-box textarea { display: block; width: 100%; margin-top: 6px; padding: 12px 14px; font: inherit; border-radius: 12px;
   border: 1px solid var(--line); background: var(--card); color: var(--ink); }
 .welcome .btn { width: 100%; }
 .hello { font-size: 1.3rem; font-weight: 700; margin: 8px 0 14px; }
@@ -137,3 +137,7 @@ main .icon-btn { background: var(--card); border: 1px solid var(--line); box-sha
 
 .world-head { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 4px 2px; font-weight: 800; font-size: 1.1rem; color: var(--brand); }
 .world-head small { color: var(--muted); font-weight: 600; }
+
+.restore-box { margin-top: 18px; text-align: left; }
+.restore-box summary { cursor: pointer; color: var(--brand); font-weight: 600; }
+.restore-box textarea { display: block; width: 100%; margin: 10px 0; padding: 12px 14px; font: inherit; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }

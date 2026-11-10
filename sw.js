@@ -1,5 +1,5 @@
 // Service worker : fonctionne hors connexion + rappel quotidien
-const VERSION = "ivrit-v2";
+const VERSION = "ivrit-v3";
 const FILES = ["./", "index.html", "style.css", "data.js", "data2.js", "app.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
 self.addEventListener("install", (e) => {
